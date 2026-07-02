@@ -1,0 +1,10 @@
+# 编译生成的文件
+bin/
+obj/
+
+# 其他可能需要忽略的文件
+*.suo
+*.user
+*.sln.docstates
+packages/
+.vs/
