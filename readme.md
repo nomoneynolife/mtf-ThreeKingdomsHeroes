@@ -1,5 +1,8 @@
 # 梦塔防*封严英雄查询工具
 
+下载整个项目，将编译的EXE放到 bin/Debug/net9.0-windows\ 在执行；可以只保留net9.0-windows文件夹，其他的源码直接删除即可；
+
+
 工具截图：
 
 ![Image](https://raw.githubusercontent.com/nomoneynolife/ThreeKingdomsHeroes/master/1.jpg)
