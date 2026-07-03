@@ -123,7 +123,9 @@
                     <TextBlock Text="锤子间隔(ms):" FontSize="13" Foreground="#666666" VerticalAlignment="Center"/>
                     <TextBox x:Name="txtHammerInterval" Width="55" Height="22" Margin="6,0,20,0" VerticalContentAlignment="Center" LostFocus="Interval_LostFocus" Tag="HammerInterval"/>
                     <TextBlock Text="大招间隔(ms):" FontSize="13" Foreground="#666666" VerticalAlignment="Center"/>
-                    <TextBox x:Name="txtUltInterval" Width="55" Height="22" Margin="6,0,0,0" VerticalContentAlignment="Center" LostFocus="Interval_LostFocus" Tag="UltInterval"/>
+                    <TextBox x:Name="txtUltInterval" Width="55" Height="22" Margin="6,0,20,0" VerticalContentAlignment="Center" LostFocus="Interval_LostFocus" Tag="UltInterval"/>
+                    <TextBlock Text="包子冷却(ms):" FontSize="13" Foreground="#666666" VerticalAlignment="Center"/>
+                    <TextBox x:Name="txtBaodaboCooldown" Width="55" Height="22" Margin="6,0,0,0" VerticalContentAlignment="Center" LostFocus="Interval_LostFocus" Tag="BaodaboActionCooldown"/>
                 </StackPanel>
 
                 <!-- 自动释放功能区域 -->

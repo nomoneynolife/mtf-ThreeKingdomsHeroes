@@ -37,6 +37,7 @@ public partial class MainWindow : WpfWindow
     private Process gameProcess = null;
     private int hammerIntervalMs = 2000;
     private int ultIntervalMs = 500;
+    private int baodaboActionCooldownMs = 25000;
     private bool isDebugModeEnabled = false;
     private int skillBrightnessThreshold = 100;
     private int hammerBrightnessThreshold = 80;
@@ -144,8 +145,10 @@ public partial class MainWindow : WpfWindow
     {
         hammerIntervalMs = GetIntervalFromConfig("HammerInterval", 2000);
         ultIntervalMs = GetIntervalFromConfig("UltInterval", 500);
+        baodaboActionCooldownMs = GetIntervalFromConfig("BaodaboActionCooldown", 25000);
         txtHammerInterval.Text = hammerIntervalMs.ToString();
         txtUltInterval.Text = ultIntervalMs.ToString();
+        txtBaodaboCooldown.Text = baodaboActionCooldownMs.ToString();
     }
 
     private void LoadThresholdSettings()
@@ -469,7 +472,7 @@ public partial class MainWindow : WpfWindow
     {
         if (baodaboTimer == null)
         {
-            int interval = GetIntervalFromConfig("BaodaboCheckInterval", 80); // 将默认间隔从5000ms改为80ms，实现低延迟响应
+            int interval = GetIntervalFromConfig("BaodaboCheckInterval", 500);
             baodaboTimer = new System.Threading.Timer(CheckBaodaboIcons, null, 0, interval);
         }
     }
@@ -1405,6 +1408,8 @@ public partial class MainWindow : WpfWindow
                 textBox.Text = hammerIntervalMs.ToString();
             else if (configKey == "UltInterval")
                 textBox.Text = ultIntervalMs.ToString();
+            else if (configKey == "BaodaboActionCooldown")
+                textBox.Text = baodaboActionCooldownMs.ToString();
             return;
         }
 
@@ -1425,6 +1430,14 @@ public partial class MainWindow : WpfWindow
             ultIntervalMs = interval;
             SaveAppSetting("UltInterval", interval.ToString());
             RestartUltTimerIfActive();
+        }
+        else if (configKey == "BaodaboActionCooldown")
+        {
+            if (interval == baodaboActionCooldownMs)
+                return;
+
+            baodaboActionCooldownMs = interval;
+            SaveAppSetting("BaodaboActionCooldown", interval.ToString());
         }
     }
 
@@ -1547,10 +1560,11 @@ public partial class MainWindow : WpfWindow
 
             Dispatcher.Invoke(() =>
             {
-                UpdateBrightnessLabel(tbSkillBrightness, tbSkillStatus, skillBrightness, skillBrightnessThreshold, "就绪");
-                UpdateBrightnessLabel(tbHammerBrightness, tbHammerStatus, hammerBrightness, hammerBrightnessThreshold, "就绪");
-                UpdateBrightnessLabel(tbBaodaboWBrightness, tbBaodaboWStatus, baodaboWBrightness, baodaboWBrightnessThreshold, "W就绪");
-                UpdateBrightnessLabel(tbBaodaboEBrightness, tbBaodaboEStatus, baodaboEBrightness, baodaboEBrightnessThreshold, "E就绪");
+                UpdateBrightnessLabel(tbSkillBrightness, tbSkillStatus, skillBrightness, skillBrightnessThreshold, "图标就绪", CanTriggerAutoAction(isF12Active, isAutoUltEnabled));
+                UpdateBrightnessLabel(tbHammerBrightness, tbHammerStatus, hammerBrightness, hammerBrightnessThreshold, "图标就绪", CanTriggerAutoAction(isF12Active, isAutoHammerEnabled));
+                bool wIconReady = baodaboWBrightness > baodaboWBrightnessThreshold;
+                UpdateBaodaboActionStatus(tbBaodaboWBrightness, tbBaodaboWStatus, baodaboWBrightness, baodaboWBrightnessThreshold, "W", false);
+                UpdateBaodaboActionStatus(tbBaodaboEBrightness, tbBaodaboEStatus, baodaboEBrightness, baodaboEBrightnessThreshold, "E", wIconReady);
             });
         }
         catch (Exception ex)
@@ -1571,7 +1585,7 @@ public partial class MainWindow : WpfWindow
         }
     }
 
-    private void UpdateBrightnessLabel(TextBlock brightnessBlock, TextBlock statusBlock, double brightness, int threshold, string readyText)
+    private void UpdateBrightnessLabel(TextBlock brightnessBlock, TextBlock statusBlock, double brightness, int threshold, string readyText, bool canAutoTrigger)
     {
         if (brightness < 0)
         {
@@ -1583,12 +1597,123 @@ public partial class MainWindow : WpfWindow
         }
 
         brightnessBlock.Text = brightness.ToString("F1");
-        bool isReady = brightness > threshold;
-        statusBlock.Text = isReady ? readyText : "未就绪";
+        bool iconReady = brightness > threshold;
         var readyColor = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#4CAF50"));
+        var warnColor = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#FF9800"));
         var notReadyColor = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#F44336"));
-        brightnessBlock.Foreground = isReady ? readyColor : notReadyColor;
-        statusBlock.Foreground = isReady ? readyColor : notReadyColor;
+
+        if (!iconReady)
+        {
+            statusBlock.Text = "未就绪";
+            brightnessBlock.Foreground = notReadyColor;
+            statusBlock.Foreground = notReadyColor;
+            return;
+        }
+
+        brightnessBlock.Foreground = readyColor;
+        if (canAutoTrigger)
+        {
+            statusBlock.Text = "可触发";
+            statusBlock.Foreground = readyColor;
+        }
+        else
+        {
+            statusBlock.Text = readyText;
+            statusBlock.Foreground = warnColor;
+        }
+    }
+
+    private void UpdateBaodaboActionStatus(TextBlock brightnessBlock, TextBlock statusBlock, double brightness, int threshold, string actionKey, bool wIconReadyForPriority)
+    {
+        if (brightness < 0)
+        {
+            brightnessBlock.Text = "无效";
+            statusBlock.Text = "区域无效";
+            brightnessBlock.Foreground = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#999999"));
+            statusBlock.Foreground = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#999999"));
+            return;
+        }
+
+        brightnessBlock.Text = brightness.ToString("F1");
+        bool iconReady = brightness > threshold;
+        var readyColor = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#4CAF50"));
+        var warnColor = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#FF9800"));
+        var notReadyColor = new SolidColorBrush((WpfColor)WpfColorConverter.ConvertFromString("#F44336"));
+
+        if (!iconReady)
+        {
+            statusBlock.Text = "未就绪";
+            brightnessBlock.Foreground = notReadyColor;
+            statusBlock.Foreground = notReadyColor;
+            return;
+        }
+
+        brightnessBlock.Foreground = readyColor;
+
+        if (!isF12Active)
+        {
+            statusBlock.Text = "图标就绪/F12未开";
+            statusBlock.Foreground = warnColor;
+            return;
+        }
+
+        if (!isAutoBaodaboEnabled)
+        {
+            statusBlock.Text = "图标就绪/未勾选";
+            statusBlock.Foreground = warnColor;
+            return;
+        }
+
+        if (IsBaodaboInCooldown(out int remainingMs))
+        {
+            int remainingSec = Math.Max(1, (int)Math.Ceiling(remainingMs / 1000.0));
+            statusBlock.Text = $"冷却中({remainingSec}s/{lastBaodaboActionKey})";
+            statusBlock.Foreground = warnColor;
+            return;
+        }
+
+        if (actionKey == "E" && wIconReadyForPriority)
+        {
+            statusBlock.Text = "图标就绪/优先W";
+            statusBlock.Foreground = warnColor;
+            return;
+        }
+
+        statusBlock.Text = "可触发";
+        statusBlock.Foreground = readyColor;
+    }
+
+    private bool CanTriggerAutoAction(bool f12Active, bool autoEnabled)
+    {
+        return f12Active && autoEnabled;
+    }
+
+    private bool IsBaodaboInCooldown(out int remainingMs)
+    {
+        if (lastBaodaboActionTime == DateTime.MinValue)
+        {
+            remainingMs = 0;
+            return false;
+        }
+
+        remainingMs = baodaboActionCooldownMs - (int)(DateTime.Now - lastBaodaboActionTime).TotalMilliseconds;
+        if (remainingMs <= 0)
+        {
+            remainingMs = 0;
+            return false;
+        }
+
+        return true;
+    }
+
+    private void PressBaodaboKey(byte key, string actionKey)
+    {
+        System.Diagnostics.Debug.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] 包大伯{actionKey}键触发");
+        keybd_event(key, 0, KEYEVENTF_KEYDOWN, 0);
+        Thread.Sleep(50);
+        keybd_event(key, 0, KEYEVENTF_KEYUP, 0);
+        lastBaodaboActionTime = DateTime.Now;
+        lastBaodaboActionKey = actionKey;
     }
 
     private void cbAutoBaodabo_Checked(object sender, RoutedEventArgs e)
@@ -1623,16 +1748,15 @@ public partial class MainWindow : WpfWindow
         }
     }
 
-    // 上次操作时间，用于防止重复触发
+    // 上次操作时间，用于防止升级过程中重复按键导致取消
     private DateTime lastBaodaboActionTime = DateTime.MinValue;
-    private const int BaodaboActionCooldown = 1000; // 操作冷却时间，单位：毫秒
+    private string lastBaodaboActionKey = "-";
     
     private void CheckBaodaboIcons(object state)
     {
         try
         {
-            // 检查冷却时间，防止重复触发
-            if ((DateTime.Now - lastBaodaboActionTime).TotalMilliseconds < BaodaboActionCooldown)
+            if (IsBaodaboInCooldown(out _))
             {
                 return;
             }
@@ -1663,15 +1787,8 @@ public partial class MainWindow : WpfWindow
                     
                     if (wBrightness > baodaboWBrightnessThreshold)
                     {
-                        // 模拟按下W键（建造）
-                        System.Diagnostics.Debug.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] 包大伯建造图标就绪，按下W键建造");
-                        keybd_event((byte)VK_W, 0, KEYEVENTF_KEYDOWN, 0);
-                        Thread.Sleep(50);
-                        keybd_event((byte)VK_W, 0, KEYEVENTF_KEYUP, 0);
-                        
-                        // 更新上次操作时间
-                        lastBaodaboActionTime = DateTime.Now;
-                        return; // 建造成功或尝试过建造，直接返回
+                        PressBaodaboKey((byte)VK_W, "W");
+                        return;
                     }
                 }
             }
@@ -1686,14 +1803,7 @@ public partial class MainWindow : WpfWindow
                     
                     if (eBrightness > baodaboEBrightnessThreshold)
                     {
-                        // 模拟按下E键（升级）
-                        System.Diagnostics.Debug.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] 包大伯升级图标就绪，按下E键升级");
-                        keybd_event((byte)VK_E, 0, KEYEVENTF_KEYDOWN, 0);
-                        Thread.Sleep(50);
-                        keybd_event((byte)VK_E, 0, KEYEVENTF_KEYUP, 0);
-                        
-                        // 更新上次操作时间
-                        lastBaodaboActionTime = DateTime.Now;
+                        PressBaodaboKey((byte)VK_E, "E");
                     }
                 }
             }
