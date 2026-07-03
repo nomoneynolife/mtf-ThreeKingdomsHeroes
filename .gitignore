@@ -1,7 +1,6 @@
 # 编译生成的文件
 #bin/
 obj/
-ThreeKingdomsHeroes.exe
 ThreeKingdomsHeroes.pdb
 
 # 其他可能需要忽略的文件
